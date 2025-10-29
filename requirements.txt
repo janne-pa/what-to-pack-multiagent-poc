@@ -1,0 +1,16 @@
+# Core dependencies
+agent-framework-azure-ai
+azure-identity
+aiohttp
+python-dotenv
+setuptools
+
+# Development dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-asyncio
+
+# Code quality
+black>=22.0.0
+flake8>=5.0.0
+mypy>=1.0.0
