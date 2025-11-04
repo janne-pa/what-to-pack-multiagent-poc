@@ -1,5 +1,5 @@
 # Core dependencies
-agent-framework-azure-ai
+agent-framework
 azure-identity
 aiohttp
 python-dotenv

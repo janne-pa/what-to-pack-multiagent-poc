@@ -22,9 +22,9 @@ from agent_framework import (
     WorkflowOutputEvent,
     WorkflowStatusEvent,
     WorkflowRunState,
-    handler,
+    handler
 )
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework.azure import AzureAIAgentClient
 from azure.identity.aio import DefaultAzureCredential
 from typing_extensions import Never
 
