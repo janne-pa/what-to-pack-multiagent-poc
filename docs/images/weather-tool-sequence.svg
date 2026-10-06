@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1100" viewBox="0 0 1480 1100" role="img" aria-labelledby="title description">
+  <title id="title">Model-selected weather tool</title>
+  <desc id="description">Successful weather tool sequence. The local WeatherAgent calls Foundry with auto tool choice. The model requests get_weather with coordinates. MAF runs the tool locally, validates coordinates and calls WeatherService and Open-Meteo. The SDK returns the measurements to the model, then passes travel information, measurements and analysis to PackingAgent. Dashed arrows represent responses. The workflow remains local.</desc>
+  <rect width="1480" height="1100" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#333333"/>
+    </marker>
+  </defs>
+  <g font-family="Arial, Helvetica, sans-serif" fill="#111111">
+    <text x="40" y="42" font-size="26" font-weight="bold">Model-selected weather tool</text>
+    <text x="40" y="68" font-size="17">The model requests the call. Python executes it locally. Open-Meteo supplies current measurements.</text>
+    <g fill="#ffffff" stroke="#444444" stroke-width="2">
+      <rect x="40" y="95" width="200" height="70" rx="6"/>
+      <rect x="280" y="95" width="200" height="70" rx="6"/>
+      <rect x="520" y="95" width="200" height="70" rx="6"/>
+      <rect x="760" y="95" width="200" height="70" rx="6"/>
+      <rect x="1000" y="95" width="200" height="70" rx="6"/>
+      <rect x="1240" y="95" width="200" height="70" rx="6"/>
+    </g>
+    <g text-anchor="middle" font-size="18">
+      <text x="140" y="123">WeatherAgent</text>
+      <text x="140" y="149">executor (local)</text>
+      <text x="380" y="123">Foundry model</text>
+      <text x="380" y="149">(Azure)</text>
+      <text x="620" y="123">MAF get_weather</text>
+      <text x="620" y="149">tool (local)</text>
+      <text x="860" y="123">WeatherService</text>
+      <text x="860" y="149">(local)</text>
+      <text x="1100" y="123">Open-Meteo</text>
+      <text x="1100" y="149">(HTTPS)</text>
+      <text x="1340" y="123">PackingAgent</text>
+      <text x="1340" y="149">executor (local)</text>
+    </g>
+    <g stroke="#999999" stroke-width="1.5" stroke-dasharray="6 6">
+      <path d="M140 165 V1030"/>
+      <path d="M380 165 V1030"/>
+      <path d="M620 165 V1030"/>
+      <path d="M860 165 V1030"/>
+      <path d="M1100 165 V1030"/>
+      <path d="M1340 165 V1030"/>
+    </g>
+    <g fill="none" stroke="#333333" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M140 230 H380"/>
+      <path d="M380 300 H140" stroke-dasharray="7 5"/>
+      <path d="M140 370 H620"/>
+      <path d="M620 440 H690 V463 H620"/>
+      <path d="M620 530 H860"/>
+      <path d="M860 600 H1100"/>
+      <path d="M1100 670 H860" stroke-dasharray="7 5"/>
+      <path d="M860 740 H620" stroke-dasharray="7 5"/>
+      <path d="M620 810 H140" stroke-dasharray="7 5"/>
+      <path d="M140 880 H380"/>
+      <path d="M380 950 H140" stroke-dasharray="7 5"/>
+      <path d="M140 1020 H1340"/>
+    </g>
+    <g font-size="18" stroke="#ffffff" stroke-width="6" stroke-linejoin="round" paint-order="stroke fill">
+      <text x="150" y="217">1. agent.run(prompt, tools=[get_weather], tool_choice="auto")</text>
+      <text x="150" y="287">2. Function call request with latitude and longitude</text>
+      <text x="150" y="357">3. SDK executes requested function</text>
+      <text x="630" y="427">4. Validate coordinate types, finite values and ranges</text>
+      <text x="630" y="517">5. get_weather_info_by_coords(latitude, longitude)</text>
+      <text x="870" y="567">6. Current temperature and wind</text>
+      <text x="870" y="590">wind_speed_unit=ms</text>
+      <text x="870" y="657">7. Measurements and units</text>
+      <text x="630" y="727">8. Validated measurements</text>
+      <text x="150" y="797">9. Structured tool result + locally recorded evidence</text>
+      <text x="150" y="867">10. SDK submits tool result</text>
+      <text x="150" y="937">11. Weather summary and packing notes JSON</text>
+      <text x="150" y="1007">12. Travel information + actual measurements + analysis</text>
+    </g>
+    <text x="40" y="1070" font-size="17">Successful-call path shown. Auto choice can omit the tool; without a successful result, use generic guidance.</text>
+  </g>
+</svg>
