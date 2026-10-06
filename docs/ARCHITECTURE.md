@@ -1,152 +1,150 @@
 # Architecture overview
 
-This is a local, single-request console demo, not a hosted application.
-Microsoft Agent Framework orchestrates three executors using Azure AI Foundry
-agents. Open-Meteo provides current weather without an API key.
+This demo turns a travel description into an English packing recommendation.
+The Python application runs on the presenter's machine, uses Foundry for AI
+model and agent services, and retrieves current weather from Open-Meteo.
+
+**The main idea:** Microsoft Agent Framework (MAF) connects three specialized
+agents into one workflow. The demo shows both a fixed agent sequence and a
+model-selected tool call.
+
+## Customer orientation: Azure Landing Zones, AI Landing Zones, Foundry and MAF
+
+These concepts serve different purposes. **Landing zones provide the governed
+Azure foundation, Foundry provides AI services, and MAF provides the software
+building blocks for the agent application.**
+
+| Suggested order | Building block | What it does | In this demo |
+|-----------------|----------------|--------------|--------------|
+| **1. Establish or reuse the foundation** | **Azure Landing Zone (Azure LZ)** | Organizes Azure subscriptions, access, networks, policies and monitoring for workloads | Not implemented |
+| **2. Adapt the foundation for AI** | **AI Landing Zone (AI LZ)** | Extends that foundation for AI needs, such as model and data access, AI-service connectivity and usage controls | Not implemented |
+| **3. Configure the AI services** | **Foundry** | Provides managed model and agent services, with capabilities for evaluation and monitoring | Supplies the project, model deployment and agent service |
+| **4. Build and integrate the agents** | **Microsoft Agent Framework (MAF)** | Helps developers implement agents, connect tools and coordinate workflows | Runs the three-agent workflow and weather tool locally |
+
+### How to use the 1-4 order
+
+Start with the business use case and data requirements. For a production rollout,
+use **Azure LZ -> AI LZ -> Foundry -> MAF** as a planning guide, not a mandatory
+installation sequence. Platform work and application development can overlap.
+A PoC such as this demo can begin with steps 3 and 4 in an approved development
+environment; the applicable governance controls must still be in place before
+production.
+
+An Azure LZ includes a **platform landing zone** for shared foundations and
+controls, and **workload landing zones** where application teams run their
+solutions within those controls. Typically, the platform team owns the shared
+foundation and the application team owns the agents and their integrations.
+
+**Reuse an existing Azure LZ where possible.** AI LZ means adapting that
+foundation for AI, not automatically building a second environment. Neither
+landing zone is an extra step in the agent's runtime workflow.
+
+The repository uses the name "Azure AI Foundry"; current Microsoft documentation
+calls the platform "Microsoft Foundry". This document uses "Foundry" for both.
+
+## What does MAF do in this demo?
+
+MAF is an **open-source software framework**, not an AI model or an Azure
+resource to provision. Developers install its libraries in their application.
+It supports multiple AI providers; this demo chooses Foundry. Foundry can also
+be used without MAF.
+
+An **agent** combines model access, instructions for a particular role and,
+optionally, tools it can call. These three agents use the same model deployment
+with different instructions, not three separately trained models.
+A **workflow** defines how their work is connected.
 
 ```text
-User input -> DestinationAgent -> WeatherAgent -> PackingAgent -> Console
+Travel description -> DestinationAgent -> WeatherAgent -> PackingAgent -> Console
 ```
 
-## Module responsibilities
+| Agent | Responsibility |
+|-------|----------------|
+| **DestinationAgent** | Extracts the destination, trip duration and travel type |
+| **WeatherAgent** | Uses the weather tool when requested by the model, then summarizes the conditions |
+| **PackingAgent** | Combines the travel request and weather guidance into a packing recommendation |
 
-- `main.py` handles CLI arguments, interactive input, console output and exit codes.
-- `workflow.py` creates the model clients, manages credentials and resources,
-  builds the MAF Sequential workflow and applies the workflow timeout.
-- `agents\destination_agent.py`, `agents\weather_agent.py` and
-  `agents\packing_agent.py` each own one executor, its prompts and its model
-  instructions. The workflow factory imports those instructions rather than
-  duplicating them. Executors receive their model clients through their constructors.
-- `weather_service.py` owns HTTP access to Open-Meteo; `config.py` owns environment
-  configuration and `json_utils.py` owns JSON extraction and field validation.
+The MAF pattern is **Sequential orchestration**: the application defines the
+order and MAF passes results from one step to the next. The model does not choose
+which agent runs next. The original travel request is retained so preferences,
+activities and timing reach PackingAgent.
 
-The agent modules do not import the workflow or CLI. This keeps dependencies
-one-way without an additional base class or factory abstraction.
+In the code, `workflow.py` defines this sequence. Each `agents\*_agent.py` module
+contains one agent's role and processing logic.
 
-## Agents and contracts
+## Where does each part run?
 
-| Stage | Required model output | Failure handling |
-|-------|-----------------------|------------------|
-| Destination | Non-empty `destination` and `travel_type`; positive integer `duration` | Stop with a request to clarify; never replace the destination |
-| Weather tool arguments | Finite numeric `latitude` in [-90, 90], `longitude` in [-180, 180] | Return a tool error; without any successful call, warn and use generic guidance |
-| Weather analysis | Non-empty `weather_summary`; non-empty list of strings `packing_notes` | If measurements exist, warn and use them directly; otherwise discard model weather claims and use generic guidance |
-| Packing | Non-empty recommendation text | Stop if empty |
+```mermaid
+flowchart LR
+    subgraph Local["Presenter's machine"]
+        CLI["Console application"]
+        MAF["MAF: three-agent Sequential workflow"]
+        Tool["get_weather + WeatherService"]
+        CLI --> MAF
+        MAF -->|"Execute model-requested tool"| Tool
+    end
+    subgraph Azure["Azure services used by this demo"]
+        Foundry["Foundry project: Agent Service + model deployment"]
+    end
+    Weather["Open-Meteo: external weather API"]
+    MAF <-->|"Authenticated API requests and responses"| Foundry
+    Tool <-->|"HTTPS: coordinates and current weather"| Weather
+```
 
-`json_utils.safe_load_validated` extracts fenced or embedded JSON and rejects
-non-object responses, missing required keys and invalid field values. Rejected
-responses return an empty dictionary with warnings. Every caller reports these
-warnings; only weather stages may continue with explicit fallback guidance.
+The **workflow and custom weather tool run locally**. Model inference and
+managed agent operations run in Azure. Using Foundry does not automatically
+host this Python application there.
 
-The original request is retained separately from extracted fields, so timing,
-activities and preferences reach the packing agent. Packing instructions request
-English output regardless of input language and explicitly distinguish current
-weather from seasonal advice. Console text and other agents' textual output are
-also English; the traveler's Finnish/EU citizenship is separate from output language.
-Model-based destination extraction and geocoding remain probabilistic.
+Travel prompts and tool results are sent to Foundry. Open-Meteo receives
+coordinates, not the full travel request.
 
 ## Architecture highlight: model-selected weather tool
 
-**Sequential orchestration** controls the order of the three agents.
-**Function calling** happens inside WeatherAgent: a Foundry model requests
-`get_weather(latitude: float, longitude: float)`, but the model does not perform
-HTTP requests. The local MAF SDK invokes the registered Python function, which
-uses the injected `WeatherService` to call Open-Meteo at a fixed URL. The model
-cannot choose an arbitrary endpoint.
+**Sequential orchestration decides the agent order. Function calling lets the
+model request an action inside an agent.** These are two different mechanisms
+used together in this demo.
 
-```mermaid
-sequenceDiagram
-    participant E as WeatherAgent executor (local)
-    participant M as Foundry model (Azure)
-    participant T as MAF get_weather tool (local)
-    participant S as WeatherService (local)
-    participant W as Open-Meteo (HTTPS)
-    participant P as PackingAgent
-    E->>M: agent.run(prompt, tools=[get_weather], tool_choice="auto")
-    M-->>E: Function call request with latitude and longitude
-    E->>T: SDK executes requested function
-    T->>T: Validate coordinate types, finite values and ranges
-    T->>S: get_weather_info_by_coords(latitude, longitude)
-    S->>W: Current temperature and wind, wind_speed_unit=ms
-    W-->>S: Measurements and units
-    S-->>T: Validated measurements
-    T-->>E: Structured tool result + locally recorded evidence
-    E->>M: SDK submits tool result
-    M-->>E: Weather summary and packing notes JSON
-    E->>P: Travel information + actual measurements + analysis
-```
+WeatherAgent exposes `get_weather(latitude, longitude)` to the model.
+When the model requests a call, MAF executes the Python function locally.
+The function validates the coordinates and uses `WeatherService` to fetch
+current measurements from Open-Meteo. MAF returns the result to the model
+so it can write the weather summary before the workflow moves to PackingAgent.
 
-The diagram shows a successful call; with `auto` the model can also answer
-without calling a tool. There is no executor-driven HTTP fallback or forced
-tool choice. One weather agent run can involve several model/tool round trips,
-bounded by the SDK's iteration limit and the workflow timeout.
+![Weather tool sequence: Foundry requests a call, local MAF retrieves Open-Meteo measurements, and the result returns to the model before PackingAgent runs.](images/weather-tool-sequence.svg)
 
-Successful tool results contain `status: "ok"`, the service's `weather` fields,
-explicit `units` (Celsius and m/s), and a current-conditions scope notice.
-Invalid coordinates or unavailable weather return `status: "unavailable"` and
-an `error`; SDK argument-validation errors are returned through the SDK's tool
-error path and reported in the console.
+**The model requests the call; Python performs the HTTP request.** The model
+does not choose an arbitrary service URL. The console shows `Tool call:
+get_weather(...)` and `Tool result: get_weather -> ...` as evidence of execution.
 
-Only actual successful service results populate the downstream `weather` field.
-The result state belongs to one executor invocation, so later trips cannot reuse
-stale weather. If the model makes several calls, the last successful result in
-invocation order wins, regardless of HTTP completion order. Later failed calls
-do not erase an earlier success. The model receives the same selection rule.
-Without any successful call, the executor discards model-authored weather claims,
-prints a warning and sends `weather: null` with generic packing guidance.
-Invalid final analysis after a successful call falls back to measured temperature
-and wind. This is provenance protection for the measurement fields, not a
-guarantee that every model-written recommendation is correct.
+Tool choice is automatic (`auto`), not forced. If the model does not call the
+tool, or no call succeeds, the application warns and uses generic packing
+guidance instead of trusting model-only weather claims. If measurements arrive
+but the model's summary is invalid, the application uses the measurements
+directly. One weather agent run can involve several model/tool round trips.
 
-Illustrative console trace (not live measurements):
+## What this demo does and does not prove
 
-```text
-Tool call: get_weather(latitude=60.17, longitude=24.94)
-Tool result: get_weather -> {"status": "ok", "weather": {"temperature": 12, "wind_speed": 4, "latitude": 60.17, "longitude": 24.94, "source": "open-meteo"}, "units": {"temperature": "Celsius", "wind_speed": "m/s"}, "scope": "current conditions, not a travel-date forecast"}
-```
+The demo illustrates **MAF orchestration, Foundry integration and local tool
+execution**. It does not implement an Azure or AI landing zone, private-network
+isolation or a production operating model.
 
-This displays tool execution evidence, not the model's private reasoning.
-Coordinates are still model-estimated rather than resolved by a verified
-geocoding service; valid numeric coordinates do not prove the location is correct.
+Weather data covers **current temperature and wind**, not a forecast for the
+travel dates. Coordinates are model-estimated, so an ambiguous destination can
+still lead to the wrong location. Packing recommendations are model-generated
+guidance, not guaranteed travel advice or a verified luggage plan.
 
-## Weather
+For production, the platform and application teams must address data handling,
+access, networking, evaluation, monitoring and operational ownership. A landing
+zone supports that environment; it does not by itself make model answers correct.
 
-The service requests current temperature in Celsius and wind in metres per
-second (`wind_speed_unit=ms`). It checks the response shape, measurements and
-reported units before accepting data. It does not retrieve precipitation,
-historical conditions or travel-date forecasts.
+For setup, execution and tests, see the [README](../README.md).
 
-A single `aiohttp.ClientSession` is reused, with a 10-second total HTTP timeout.
-HTTP, network, timeout and invalid-response failures are visible and return no
-weather. The packing agent then receives explicit weather-unavailable guidance.
-Unexpected programming errors are not suppressed by the weather service.
+## Microsoft references
 
-## Configuration and lifetime
+- [What is an Azure landing zone?](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/landing-zone/)
+- [Cloud Adoption Framework: AI Ready](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ai/ready)
+- [What is Microsoft Foundry?](https://learn.microsoft.com/en-us/azure/foundry/what-is-foundry)
+- [Microsoft Agent Framework overview](https://learn.microsoft.com/en-us/agent-framework/overview/)
 
-`AzureAIConfig` loads `.env` from the repository root without overriding shell
-variables. The endpoint must be an HTTPS Foundry project endpoint containing
-`/api/projects/<project>`, not an Azure OpenAI resource endpoint. A non-empty
-model deployment name is required, with `gpt-4o-mini` as the default.
-
-`DefaultAzureCredential` is shared across clients. Agents and credentials are
-managed as async context managers; the weather session is closed in `finally`.
-The workflow stream is consumed to completion and an absent final output is an
-error. The console bounds the workflow to 120 seconds. Reported failures return
-a non-zero exit code, including interruptions while entering a request.
-
-## Dependencies and testing
-
-The core framework and Azure provider are pinned to the same beta API generation.
-The Azure Projects and MCP dependencies are pinned separately to prevent
-unplanned API migrations. MCP 2.x is incompatible with this SDK's exception
-imports. Only the required provider is installed, not the framework umbrella.
-Other transitive dependencies are resolved by pip; there is no full lockfile.
-
-Offline pytest tests exercise validation, configuration, HTTP error paths,
-resource cleanup, CLI exit codes, direct-script and package-module entry points,
-the real SDK workflow using fake agents, and model-selected function invocation
-using scripted responses through the real SDK tool loop. Tool tests cover
-argument validation, returned evidence, no-tool/failure fallbacks, repeated calls,
-out-of-order completion and stale-state prevention. No test requires credentials
-or internet access. Live authentication,
-project permissions, model behavior and latency require a separate rehearsal
-with the actual Azure project.
+The links explain the current concepts. This demo uses pinned SDK versions,
+so examples in current product documentation may use different APIs.
