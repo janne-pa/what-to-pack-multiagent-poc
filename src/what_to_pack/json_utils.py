@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,7 +40,7 @@ def try_parse_json(raw: str) -> Tuple[Optional[Any], Optional[str]]:
     try:
         data = json.loads(raw)
         return data, None
-    except Exception as e:  # noqa: BLE001
+    except json.JSONDecodeError as e:
         return None, str(e)
 
 
@@ -55,7 +56,7 @@ def safe_load_validated(raw: str, required_keys: List[str]) -> Tuple[Dict[str, A
     """Extract, parse and validate JSON returning (data, warnings).
 
     Falls back to empty dict if parsing fails.
-    Adds warnings for parse errors or missing keys.
+    Rejects non-object responses, missing keys and invalid field values.
     """
     warnings: List[str] = []
     json_text = extract_json_text(raw)
@@ -66,6 +67,32 @@ def safe_load_validated(raw: str, required_keys: List[str]) -> Tuple[Dict[str, A
     ok, missing = validate_keys(data, required_keys)
     if not ok:
         warnings.append(f"Missing keys: {', '.join(missing)}")
+        return {}, warnings
+    for key in required_keys:
+        value = data[key]
+        if key in ("destination", "travel_type", "weather_summary"):
+            valid = isinstance(value, str) and bool(value.strip())
+        elif key == "duration":
+            valid = type(value) is int and value > 0
+        elif key in ("latitude", "longitude"):
+            limit = 90 if key == "latitude" else 180
+            valid = (
+                type(value) in (int, float)
+                and -limit <= value <= limit
+                and math.isfinite(value)
+            )
+        elif key == "packing_notes":
+            valid = (
+                isinstance(value, list)
+                and bool(value)
+                and all(isinstance(item, str) and bool(item.strip()) for item in value)
+            )
+        else:
+            valid = True
+        if not valid:
+            warnings.append(f"Invalid value for {key}")
+    if warnings:
+        return {}, warnings
     return data, warnings
 
 

@@ -1,16 +1,10 @@
-# Core dependencies
-agent-framework
-azure-identity
-aiohttp
-python-dotenv
-setuptools
-
-# Development dependencies
-pytest>=7.0.0
-pytest-cov>=4.0.0
-pytest-asyncio
-
-# Code quality
-black>=22.0.0
-flake8>=5.0.0
-mypy>=1.0.0
+# Keep the workflow and Azure client on the same API generation.
+agent-framework-core==1.0.0b251016
+agent-framework-azure-ai==1.0.0b251016
+# MCP 2.x renamed exception types imported by this framework version.
+mcp==1.26.0
+azure-ai-projects==1.0.0
+azure-identity==1.25.2
+aiohttp==3.13.1
+python-dotenv==1.2.1
+typing-extensions==4.15.0
